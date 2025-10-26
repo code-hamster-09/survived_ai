@@ -1,3 +1,5 @@
+import { TextStyle } from 'react-native';
+
 export const colors = {
   primary: '#7A5AF5', // Фиолетовый мягкий (нейронный эффект)
   accent: '#C77DFF',  // Розово-фиолетовый подсветки (акцент)
@@ -11,6 +13,7 @@ export const colors = {
   headerText: '#E2E8F0', // Текст хедера
   userMessageBackground: '#344762', // Фон сообщений пользователя (справа)
   modelMessageBackground: '#E2E8F0', // Фон сообщений модели (слева)
+  buttonBackground: '#7A5AF5', // Цвет фона кнопки (используем primary)
 };
 
 export const spacing = {
@@ -25,22 +28,26 @@ export const borderRadius = {
   large: 25,
 };
 
-export const typography = {
+export const typography: { [key: string]: TextStyle } = {
   h1: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '700', // Изменено на числовое значение
     color: colors.headerText,
-  },
+  } as TextStyle,
   body: {
     fontSize: 16,
     color: colors.textPrimary,
-  },
+  } as TextStyle,
   small: {
     fontSize: 12,
     color: colors.textSecondary,
-  },
+  } as TextStyle,
   chatMessage: {
     fontSize: 16,
     lineHeight: 24,
-  },
+  } as TextStyle,
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+  } as TextStyle,
 };

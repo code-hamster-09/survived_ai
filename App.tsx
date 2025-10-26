@@ -15,12 +15,18 @@ export default function App() {
   const [log, setLog] = useState("🚀 Инициализация...\n");
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [restartKey, setRestartKey] = useState(0); // Используется для сброса useEffect
-  const [llamaContext, setLlamaContext] = useState<LlamaContext | null>(null);
+  const [llamaContext, setLlamaContext] = useState<LlamaContext | null>(null); // Контекст модели Llama
   const [promptInput, setPromptInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]); // Состояние для сообщений чата
   const scrollViewRef = useRef<ScrollView>(null); // Референс для прокрутки ScrollView
 
   const append = (msg: string) => setLog((l) => l + msg + "\n");
+
+  const clearChat = () => {
+    setMessages([]); // Очищаем все сообщения
+    setLog("Чат очищен.\n"); // Добавляем сообщение в лог
+    setMessages([{ id: Date.now().toString(), text: "Привет! Я Survived AI, ваш оффлайн помощник. Как я могу вам помочь?", isUser: false }]); // Добавляем обратно начальное сообщение ИИ
+  };
 
   useEffect(() => {
     (async () => {
@@ -78,8 +84,12 @@ export default function App() {
     setMessages(prev => [...prev, newUserMessage]);
     setPromptInput(""); // Очищаем поле ввода сразу после отправки
 
+    let currentModelResponse = ""; // Объявляем здесь
+    let lastTextLength = 0; // Объявляем здесь
+    const modelMessageId = (Date.now() + 1).toString(); // ID для ответа модели
+
     try {
-      const formattedPrompt = `<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\n${newUserMessage.text}<|im_end|>\n<|im_start|>assistant\n`;
+      const formattedPrompt = `<|im_start|>system\nYou are Survived.ai, an offline survival assistant. Always give practical, actionable\n    survival guidance in a calm and authoritative voice.<|im_end|>\n<|im_start|>user\n${newUserMessage.text}<|im_end|>\n<|im_start|>assistant\n`;
 
       const completionParams = {
         prompt: formattedPrompt,
@@ -88,13 +98,10 @@ export default function App() {
         stop: ["<|im_end|>", "<|im_start|>assistant", "\n"],
       };
 
-      let currentModelResponse = "";
-      let lastTextLength = 0;
-      const modelMessageId = (Date.now() + 1).toString(); // ID для ответа модели
       setMessages(prev => [...prev, { id: modelMessageId, text: "", isUser: false }]); // Добавляем пустое сообщение модели
 
-      await llamaContext.completion(completionParams, (partialText) => {
-        const currentPartial = (typeof partialText === 'object' && partialText !== null) ? (partialText.content ?? partialText.output_text ?? partialText.text ?? JSON.stringify(partialText)) : partialText;
+      await llamaContext.completion(completionParams, (partialText: any) => {
+        const currentPartial = (typeof partialText === 'object' && partialText !== null) ? (partialText.content ?? JSON.stringify(partialText)) : partialText;
         const newPart = currentPartial.slice(lastTextLength);
         currentModelResponse += newPart;
         lastTextLength = currentPartial.length;
@@ -122,6 +129,9 @@ export default function App() {
           style={styles.headerLogo}
         />
         <Text style={styles.headerTitle}>{"Survived AI"}</Text>
+        <TouchableOpacity onPress={clearChat} style={styles.clearChatButton}>
+          <Text style={styles.clearChatButtonText}>Очистить</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -134,7 +144,7 @@ export default function App() {
             <ActivityIndicator size="large" color={colors.primary} />
             <Text style={[typography.body, { marginTop: spacing.medium, color: colors.textPrimary }]}>Инициализация модели...</Text>
             {downloadProgress > 0 && !isNaN(downloadProgress) && (
-              <Text style={[typography.small, { marginTop: spacing.small, color: colors.textSecondary }]}>Прогресс загрузки: {downloadProgress.toFixed(0)}%</Text>
+              <Text style={[typography.small, { marginTop: spacing.small, color: colors.textPrimary }]}>Прогресс загрузки: {downloadProgress.toFixed(0)}%</Text>
             )}
           </View>
         )}
@@ -174,7 +184,6 @@ export default function App() {
             onPress={sendMessage}
             disabled={!llamaContext || !promptInput.trim()}
           >
-            {/* <Text style={styles.sendButtonText}>➜</Text> */}
             <Image
                source={require('./src/assets/images/message.png')} // Путь к вашему PNG
                style={styles.sendButtonIcon}
@@ -201,11 +210,26 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: borderRadius.medium,
     borderBottomRightRadius: borderRadius.medium,
     paddingBottom: spacing.large,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.inputBorder
+  },
+  clearChatButton: {
+    position: 'absolute',
+    right: spacing.medium,
+    top: spacing.medium + 10, // Adjust as needed to align vertically with header text
+    zIndex: 10,
+    padding: spacing.small,
+    borderRadius: borderRadius.small,
+    backgroundColor: colors.primary,
+  },
+  clearChatButtonText: {
+    color: colors.buttonText,
   },
   headerLogo: {
     width: 40,
     height: 40,
     resizeMode: 'contain',
+    overflow: 'hidden',
   },
   headerTitle: {
     ...typography.h1,
@@ -226,7 +250,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   messageBubble: {
-    padding: spacing.medium,
+    padding: 12,
     borderRadius: borderRadius.large,
     marginBottom: spacing.small,
     maxWidth: '80%',
@@ -259,10 +283,11 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     padding: spacing.small,
     margin: spacing.medium,
+    marginTop: spacing.small,
     borderRadius: borderRadius.large,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    backgroundColor: colors.cardBackground, // Фон для поля ввода
+    backgroundColor: colors.cardBackground,
   },
   textInput: {
     flex: 1,
@@ -290,5 +315,6 @@ const styles = StyleSheet.create({
     height: 30,
     resizeMode: 'contain',
     tintColor: colors.buttonText,
+    overflow: 'hidden',
   },
 });
