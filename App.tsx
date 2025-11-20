@@ -1,5 +1,4 @@
 import { initLlama, LlamaContext } from '@pocketpalai/llama.rn';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,62 +18,43 @@ import {
 } from './src/utils/llamaUtils';
 
 // Определение типа для сообщения в чате
-interface ChatMessage {
-  id: string;
-  text: string;
-  isUser: boolean;
-}
+// interface ChatMessage {
+//   id: string;
+//   text: string;
+//   isUser: boolean;
+// }
+
+// Импортируем TypingIndicator из нового файла
+import TypingIndicator from './src/components/TypingIndicator';
+import {
+  FATAL_ERROR_MESSAGE,
+  INITIAL_AI_MESSAGE,
+  LLAMA_SYSTEM_PROMPT,
+} from './src/constants';
+import { ChatMessage } from './src/types';
 
 export default function App() {
   const [log, setLog] = useState('🚀 Инициализация...\n');
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
-  const [restartKey, setRestartKey] = useState(0); // Используется для сброса useEffect
-  const [llamaContext, setLlamaContext] = useState<LlamaContext | null>(null); // Контекст модели Llama
+  const [restartKey, setRestartKey] = useState(0);
+  const [llamaContext, setLlamaContext] = useState<LlamaContext | null>(null);
   const [promptInput, setPromptInput] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]); // Состояние для сообщений чата
-  const scrollViewRef = useRef<ScrollView>(null); // Референс для прокрутки ScrollView
+  const { messages, setMessages, clearStoredMessages } = useChatStorage();
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const append = (msg: string) => setLog(l => l + msg + '\n');
 
   const clearChat = async () => {
-    setMessages([]); // Очищаем все сообщения в локальном состоянии
-    setLog('Чат очищен.\n'); // Добавляем сообщение в лог
-    try {
-      await AsyncStorage.removeItem('chatMessages'); // Явно удаляем историю чата из AsyncStorage
-      append('История чата удалена из хранилища.\n');
-    } catch (e) {
-      console.error('Ошибка при очистке хранилища: ', e);
-    }
+    setMessages([]);
+    setLog('Чат очищен.\n');
+    await clearStoredMessages();
     setMessages([
       {
         id: Date.now().toString(),
-        text: 'Привет! Я Survived AI, ваш оффлайн помощник. Как я могу вам помочь?',
+        text: INITIAL_AI_MESSAGE,
         isUser: false,
       },
-    ]); // Добавляем обратно начальное сообщение ИИ
-  };
-
-  const saveMessages = async (currentMessages: ChatMessage[]) => {
-    try {
-      const messagesToSave = currentMessages.slice(-200); // Ограничиваем до последних 200 сообщений
-      await AsyncStorage.setItem(
-        'chatMessages',
-        JSON.stringify(messagesToSave),
-      );
-    } catch (e) {
-      console.error('Ошибка при сохранении сообщений: ', e);
-    }
-  };
-
-  const loadMessages = async () => {
-    try {
-      const savedMessages = await AsyncStorage.getItem('chatMessages');
-      if (savedMessages) {
-        setMessages(JSON.parse(savedMessages));
-      }
-    } catch (e) {
-      console.error('Ошибка при загрузке сообщений: ', e);
-    }
+    ]);
   };
 
   useEffect(() => {
@@ -101,22 +81,18 @@ export default function App() {
             ...optimizedParams,
             use_progress_callback: true,
           },
-          (_progress: number) => {
-            // Здесь можно обновлять прогресс инициализации, если нужно
-            // console.log('progress: ', _progress);
-          },
+          (_progress: number) => {},
         );
         const t1 = Date.now();
         append(`Модель Llama инициализирована за ${t1 - t0} мс.`);
         setLlamaContext(ctx);
         append('Модель Llama успешно инициализирована!');
-        // Устанавливаем начальное сообщение только если нет загруженных
         setMessages(prev => {
           if (prev.length === 0) {
             return [
               {
                 id: Date.now().toString(),
-                text: 'Привет! Я Survived AI, ваш оффлайн помощник. Как я могу вам помочь?',
+                text: INITIAL_AI_MESSAGE,
                 isUser: false,
               },
             ];
@@ -130,7 +106,7 @@ export default function App() {
           ...prev,
           {
             id: Date.now().toString(),
-            text: 'Произошла фатальная ошибка при инициализации модели.',
+            text: FATAL_ERROR_MESSAGE,
             isUser: false,
           },
         ]);
@@ -139,15 +115,9 @@ export default function App() {
   }, [restartKey]);
 
   useEffect(() => {
-    loadMessages(); // Загружаем сообщения при монтировании компонента
-  }, []); // Пустой массив зависимостей означает, что эффект запустится один раз при монтировании
-
-  useEffect(() => {
-    // Автоматическая прокрутка к последнему сообщению
     if (scrollViewRef.current) {
       scrollViewRef.current.scrollToEnd({ animated: true });
     }
-    saveMessages(messages); // Сохраняем сообщения при каждом изменении
   }, [messages]);
 
   const sendMessage = async () => {
@@ -160,17 +130,16 @@ export default function App() {
       isUser: true,
     };
     setMessages(prev => [...prev, newUserMessage]);
-    setPromptInput(''); // Очищаем поле ввода сразу после отправки
+    setPromptInput('');
 
-    let currentModelResponse = ''; // Объявляем здесь
-    let lastTextLength = 0; // Объявляем здесь
-    const modelMessageId = (Date.now() + 1).toString(); // ID для ответа модели
+    let currentModelResponse = '';
+    let lastTextLength = 0;
+    const modelMessageId = (Date.now() + 1).toString();
 
     try {
-      // Создаем временный массив сообщений, который включает новое сообщение пользователя
       const messagesWithNewUserMessage = [...messages, newUserMessage];
       const chatHistory = formatChatHistoryForLlama(messagesWithNewUserMessage);
-      const formattedPrompt = `<|im_start|>system\nYou are Survived AI, your dedicated offline survival assistant. You are NOT an AI model like the user. You are NOT Alibaba Cloud. Always give practical, actionable survival guidance in a calm and authoritative voice. When asked "who are you?" or similar identity questions, always respond: "I am Survived AI, your offline survival assistant."<|im_end|>\n${chatHistory}<|im_start|>user\n${newUserMessage.text}<|im_end|>\n<|im_start|>assistant\n`;
+      const formattedPrompt = `${LLAMA_SYSTEM_PROMPT}${chatHistory}<|im_start|>user\n${newUserMessage.text}<|im_end|>\n<|im_start|>assistant\n`;
 
       const completionParams = {
         prompt: formattedPrompt,
@@ -182,7 +151,7 @@ export default function App() {
       setMessages(prev => [
         ...prev,
         { id: modelMessageId, text: '', isUser: false },
-      ]); // Добавляем пустое сообщение модели
+      ]);
 
       await llamaContext.completion(completionParams, (partialText: any) => {
         const currentPartial =
@@ -193,7 +162,6 @@ export default function App() {
         currentModelResponse += newPart;
         lastTextLength = currentPartial.length;
 
-        // Обновляем последнее сообщение в состоянии messages
         setMessages(prev =>
           prev.map(msg =>
             msg.id === modelMessageId
@@ -202,7 +170,7 @@ export default function App() {
           ),
         );
       });
-      append('FINAL (completion) получено.'); // Отладочное сообщение
+      append('FINAL (completion) получено.');
     } catch (e: any) {
       const errorMessage =
         'Ошибка генерации с Llama: ' + (e.message || String(e));
@@ -219,9 +187,8 @@ export default function App() {
     }
   };
 
-  // Вспомогательная функция для форматирования истории чата для Llama
   const formatChatHistoryForLlama = (chatHistory: ChatMessage[]) => {
-    const historyToFormat = chatHistory.slice(-200); // Берем последние 200 сообщений
+    const historyToFormat = chatHistory.slice(-200);
     let formattedHistory = '';
     historyToFormat.forEach(msg => {
       if (msg.isUser) {
@@ -236,11 +203,14 @@ export default function App() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Image
-          source={require('./src/assets/images/no_bgtext.png')}
-          style={styles.headerLogo}
-        />
-        <Text style={styles.headerTitle}>{'Survived AI'}</Text>
+        <View style={styles.headerLeft}>
+          <Image
+            source={require('./src/assets/images/no_bgtext.png')}
+            style={styles.headerLogo}
+          />
+          <Text style={styles.headerTitle}>Survived AI</Text>
+        </View>
+
         <TouchableOpacity onPress={clearChat} style={styles.clearChatButton}>
           <Text style={styles.clearChatButtonText}>Очистить</Text>
         </TouchableOpacity>
@@ -287,16 +257,20 @@ export default function App() {
                     : styles.modelMessageBubble,
                 ]}
               >
-                <Text
-                  style={[
-                    typography.chatMessage,
-                    message.isUser
-                      ? styles.userMessageText
-                      : styles.modelMessageText,
-                  ]}
-                >
-                  {message.text}
-                </Text>
+                {message.text ? (
+                  <Text
+                    style={[
+                      typography.chatMessage,
+                      message.isUser
+                        ? styles.userMessageText
+                        : styles.modelMessageText,
+                    ]}
+                  >
+                    {message.text}
+                  </Text>
+                ) : (
+                  !message.isUser && <TypingIndicator />
+                )}
               </View>
             ))}
           </View>
@@ -324,7 +298,7 @@ export default function App() {
             disabled={!llamaContext || !promptInput.trim()}
           >
             <Image
-              source={require('./src/assets/images/message.png')} // Путь к вашему PNG
+              source={require('./src/assets/images/message.png')}
               style={styles.sendButtonIcon}
             />
           </TouchableOpacity>
@@ -340,29 +314,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    padding: spacing.medium,
+    padding: spacing.large,
     backgroundColor: colors.headerBackground,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: spacing.small,
+    justifyContent: 'space-between',
     borderBottomLeftRadius: borderRadius.medium,
     borderBottomRightRadius: borderRadius.medium,
-    paddingBottom: spacing.large,
     borderBottomWidth: 1,
     borderBottomColor: colors.inputBorder,
   },
-  clearChatButton: {
-    position: 'absolute',
-    right: spacing.medium,
-    top: spacing.medium + 10, // Adjust as needed to align vertically with header text
-    zIndex: 10,
-    padding: spacing.small,
-    borderRadius: borderRadius.small,
-    backgroundColor: colors.primary,
-  },
-  clearChatButtonText: {
-    color: colors.buttonText,
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.small,
   },
   headerLogo: {
     width: 40,
@@ -373,6 +338,17 @@ const styles = StyleSheet.create({
   headerTitle: {
     ...typography.h1,
     color: colors.headerText,
+  },
+  clearChatButton: {
+    padding: spacing.small,
+    borderRadius: borderRadius.small,
+    backgroundColor: colors.cardBackground,
+    borderWidth: 1,
+    borderColor: colors.textSecondary,
+  },
+  clearChatButtonText: {
+    color: colors.textPrimary,
+    fontWeight: 'bold',
   },
   scrollViewContent: {
     flexGrow: 1,
@@ -439,9 +415,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cardBackground,
   },
   sendButton: {
-    borderRadius: borderRadius.large, // Сделать круглой
-    width: 40, // Фиксированная ширина
-    height: 40, // Фиксированная высота
+    borderRadius: borderRadius.large,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: spacing.small,
