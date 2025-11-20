@@ -1,8 +1,12 @@
 import DeviceInfo from 'react-native-device-info';
 import RNFS from 'react-native-fs';
 
-export async function getLlamaModelPath(onProgress?: (progress: number) => void): Promise<string | null> {
-  const modelName = "qwen2.5-0.5b-instruct-q5_k_m.gguf";
+const GGML_FILE_NAME = 'ggml-model-q4_0.bin';
+
+export async function getLlamaModelPath(
+  onProgress?: (progress: number) => void,
+): Promise<string | null> {
+  const modelName = 'qwen2.5-0.5b-instruct-q5_k_m.gguf';
   const modelUrl = `https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/${modelName}`;
 
   const localPath = `${RNFS.DocumentDirectoryPath}/${modelName}`;
@@ -14,7 +18,7 @@ export async function getLlamaModelPath(onProgress?: (progress: number) => void)
       const { promise } = RNFS.downloadFile({
         fromUrl: modelUrl,
         toFile: localPath,
-        progress: (res) => {
+        progress: res => {
           const percentage = (res.bytesWritten / res.contentLength) * 100;
           if (onProgress) {
             onProgress(percentage);
@@ -23,13 +27,13 @@ export async function getLlamaModelPath(onProgress?: (progress: number) => void)
         },
       });
       await promise;
-      console.log("Модель успешно скачана!");
+      console.log('Модель успешно скачана!');
     } else {
-      console.log("Модель уже существует локально.");
+      console.log('Модель уже существует локально.');
     }
     return localPath;
   } catch (error) {
-    console.error("Ошибка при получении пути к модели Llama: ", error);
+    console.error('Ошибка при получении пути к модели Llama: ', error);
     return null;
   }
 }
@@ -37,13 +41,15 @@ export async function getLlamaModelPath(onProgress?: (progress: number) => void)
 export async function getOptimizedLlamaInitParams() {
   let processorCount = 4;
   try {
-    if (typeof DeviceInfo.getProcessorCount === "function") {
-      processorCount = await DeviceInfo.getProcessorCount();
+    if (typeof (DeviceInfo as any).getProcessorCount === 'function') {
+      processorCount = await (DeviceInfo as any).getProcessorCount();
     } else {
-      console.warn("⚠️ DeviceInfo.getProcessorCount не найден — используем значение по умолчанию (4)");
+      console.warn(
+        '⚠️ DeviceInfo.getProcessorCount не найден — используем значение по умолчанию (4)',
+      );
     }
   } catch (e) {
-    console.warn("⚠️ Ошибка получения количества процессоров:", e);
+    console.warn('⚠️ Ошибка получения количества процессоров:', e);
   }
 
   const n_gpu_layers = 0;
@@ -51,7 +57,7 @@ export async function getOptimizedLlamaInitParams() {
   const n_ctx = 2048;
   const use_mmap = true;
 
-  console.log("Оптимизированные параметры Llama:", {
+  console.log('Оптимизированные параметры Llama:', {
     n_ctx,
     n_gpu_layers,
     n_threads,
