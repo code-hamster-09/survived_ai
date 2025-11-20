@@ -22,7 +22,7 @@ export const useChatStorage = () => {
         JSON.stringify(messagesToSave),
       );
     } catch (e) {
-      console.error('Ошибка при сохранении сообщений: ', e);
+      // console.error("Ошибка при сохранении сообщений: ", e);
     }
   };
 
@@ -33,16 +33,16 @@ export const useChatStorage = () => {
         setMessages(JSON.parse(savedMessages));
       }
     } catch (e) {
-      console.error('Ошибка при загрузке сообщений: ', e);
+      // console.error("Ошибка при загрузке сообщений: ", e);
     }
   };
 
   const clearStoredMessages = async () => {
     try {
       await AsyncStorage.removeItem(CHAT_STORAGE_KEY);
-      console.log('История чата удалена из хранилища.');
+      // console.log('История чата удалена из хранилища.');
     } catch (e) {
-      console.error('Ошибка при очистке хранилища: ', e);
+      // console.error('Ошибка при очистке хранилища: ', e);
     }
   };
 
